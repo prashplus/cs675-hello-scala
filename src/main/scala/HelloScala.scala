@@ -11,6 +11,12 @@ case class And(e1: Expr, e2: Expr) extends Expr {
 case class Not(e: Expr) extends Expr {
   override def toString() = "!" + e.toString()
 }
+case class Or(e1: Expr, e2: Expr) extends Expr {
+  override def toString() = "(" + e1.toString() + " || " + e2.toString() + ")"
+}
+case class Iff(e1: Expr, e2: Expr) extends Expr {
+  override def toString() = "(" + e1.toString() + " <==> " + e2.toString() + ")"
+}
 
 abstract class Stmt
 case class IfElseStmt(e: Expr, t: Stmt, f: Stmt) extends Stmt {
@@ -35,6 +41,8 @@ object HelloScala {
       case Var(n) => Set(n)
       case And(e1, e2) => findVariablesInExpr(e1) ++ findVariablesInExpr(e2)
       case Not(e) => findVariablesInExpr(e)
+      case Or(e1, e2) => findVariablesInExpr(e1) ++ findVariablesInExpr(e2)
+      case Iff(e1, e2) => findVariablesInExpr(e1) ++ findVariablesInExpr(e2)
     }
   }
 
@@ -43,6 +51,36 @@ object HelloScala {
       case CallStmt(f) => Set.empty
       case IfElseStmt(e, t, f) =>
         findVariablesInExpr(e) ++ findVariables(t) ++ findVariables(f)
+    }
+  }
+  
+  def converToBooleanExp(s: Stmt): Expr = s match {
+    case CallStmt(name) => Var(name)
+    case IfElseStmt(e,t,f) => Or(And(e, converToBooleanExp(t)), And(Not(e), converToBooleanExp(f)))
+  }
+
+  def evaluateExpr(e: Expr, m: Map[String, Boolean]): Boolean = e match {
+    case Var(name) => m.get(name).get
+    case And(e1, e2) => evaluateExpr(e1, m) && evaluateExpr(e2, m)
+    case Or(e1, e2) => evaluateExpr(e1, m) && evaluateExpr(e2, m)
+    case Not(e1) => !evaluateExpr(e1, m)
+    case Iff(e1, e2) => evaluateExpr(Or(And(e1,e2), And(Not(e1), Not(e2))),m)
+  }
+
+  def printTruthTable(e: Expr, vars: Set[String], m: Map[String, Boolean]): Unit = {
+    if(!vars.isEmpty) {
+      val variable = vars.head
+      printTruthTable( e, vars.tail, m + (variable -> true))
+      printTruthTable( e, vars.tail, m + (variable -> false))
+    }
+    else {
+      val ans = evaluateExpr(e, m)
+      m.foreach{
+        x => x match {
+          case (varname, assignment) => print(varname + " = " + assignment + "\t")
+        }
+      }
+      println("Evaluates  to "+ ans)
     }
   }
 
@@ -54,5 +92,25 @@ object HelloScala {
     println(s1.toString())
     println("Functions in the above: " + findFunctions(s1))
     println("Variables in the above: " + findVariables(s1))
+    print('\n')
+    val s2 = IfElseStmt(Var("a"),CallStmt("f"),
+            IfElseStmt(Var("b"),CallStmt("g"), CallStmt("h")))
+    println(s2.toString())
+    println("Functions in the above: " + findFunctions(s2))
+    println("Variables in the above: " + findVariables(s2))
+    
+
+    val original = converToBooleanExp(s1)
+    val optimised = converToBooleanExp(s2)
+
+    println("S1 converted to boolean Expression : " + original)
+    println("S2 converted to boolean Expression : " + optimised)
+
+    val eqExp = Iff(original, optimised)
+
+    val variables = findVariablesInExpr(eqExp)
+    println("Variables in the above: " + variables)
+
+    printTruthTable(eqExp, variables, Map.empty[String, Boolean])
   }
 }
